@@ -1,28 +1,35 @@
 package strawman.collection
 
-import scala.{Int, Boolean, Nothing, annotation}
+import scala.{Any, Boolean, Equals, Int, Nothing, annotation}
 import scala.Predef.intWrapper
 
 /** Concrete collection type: View */
-trait View[+A] extends Iterable[A] with IterableLike[A, View] {
+trait View[+A] extends Iterable[A] with IterableOps[A, View, View[A]] {
   override def view = this
 
-  /** Avoid copying if source collection is already a view. */
-  override def fromIterable[B](c: Iterable[B]): View[B] = c match {
-    case c: View[B] => c
-    case _ => View.fromIterator(c.iterator())
-  }
+  def iterableFactory = View
+
+  override protected[this] def fromSpecificIterable(coll: Iterable[A]): View[A] =
+    fromIterable(coll)
+
   override def className = "View"
-
-  protected[this] def fromIterableWithSameElemType(coll: Iterable[A]): View[A] = fromIterable(coll)
-
 }
 
 /** This object reifies operations on views as case classes */
-object View {
+object View extends IterableFactory[View] {
+
   def fromIterator[A](it: => Iterator[A]): View[A] = new View[A] {
     def iterator() = it
   }
+
+  /** Avoid copying if source collection is already a view. */
+  def fromIterable[E](it: Iterable[E]): View[E] = it match {
+    case it: View[E] => it
+    case _ => View.fromIterator(it.iterator())
+  }
+
+  def empty[A]: View[A] = Empty
+  override def apply[A](xs: A*): View[A] = Elems(xs: _*)
 
   /** The empty view */
   case object Empty extends View[Nothing] {
@@ -72,11 +79,6 @@ object View {
   /** A view representing one half of a partition. */
   case class Partitioned[A](partition: Partition[A], cond: Boolean) extends View[A] {
     def iterator() = partition.underlying.iterator().filter(x => partition.p(x) == cond)
-  }
-
-  case class SplitAt[A](underlying: Iterable[A], n: Int) {
-    val left = Take(underlying, n)
-    val right = Drop(underlying, n)
   }
 
   /** A view that drops leading elements of the underlying collection. */
@@ -129,6 +131,12 @@ object View {
       case _ => -1
     }
   }
+}
+
+/** A trait representing indexable collections with finite length */
+trait ArrayLike[+A] extends Any {
+  def length: Int
+  def apply(i: Int): A
 }
 
 /** View defined in terms of indexing a range */

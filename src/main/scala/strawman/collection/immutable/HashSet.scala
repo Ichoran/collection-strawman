@@ -1,11 +1,11 @@
 package strawman
+package collection
+package immutable
 
-package collection.immutable
+import mutable.Builder
+import Hashing.computeHash
 
-import strawman.collection.{IterableFactory, Iterator}
-import strawman.collection.mutable.{Builder, ImmutableSetBuilder}
-
-import scala.{Any, AnyRef, Array, Boolean, inline, Int, NoSuchElementException, Serializable, SerialVersionUID, sys, Unit}
+import scala.{Any, AnyRef, Array, Boolean, `inline`, Int, NoSuchElementException, SerialVersionUID, Serializable, Unit, sys}
 import scala.Predef.assert
 import java.lang.Integer
 
@@ -25,21 +25,24 @@ import java.lang.Integer
 @SerialVersionUID(2L)
 sealed trait HashSet[A]
   extends Set[A]
-    with SetLike[A, HashSet]
-    with Serializable {
+     with SetOps[A, HashSet, HashSet[A]]
+     with Serializable {
 
   import HashSet.nullToEmpty
 
-  // From IterablePolyTransforms
-  def fromIterable[B](coll: collection.Iterable[B]): HashSet[B] = HashSet.fromIterable(coll)
-  protected[this] def fromIterableWithSameElemType(coll: collection.Iterable[A]): HashSet[A] = fromIterable(coll)
+  def iterableFactory = HashSet
 
-  // From SetLike
+  protected[this] def fromSpecificIterable(coll: collection.Iterable[A]): HashSet[A] = fromIterable(coll)
+
   def contains(elem: A): Boolean = get0(elem, computeHash(elem), 0)
 
-  def + (elem: A): HashSet[A] = updated0(elem, computeHash(elem), 0)
+  def incl(elem: A): HashSet[A] = updated0(elem, computeHash(elem), 0)
 
-  def - (elem: A): HashSet[A] = nullToEmpty(removed0(elem, computeHash(elem), 0))
+  def excl(elem: A): HashSet[A] = nullToEmpty(removed0(elem, computeHash(elem), 0))
+
+  override def empty: HashSet[A] = HashSet.empty
+
+  override def tail: HashSet[A] = this - head
 
   protected def get0(key: A, hash: Int, level: Int): Boolean
 
@@ -47,26 +50,17 @@ sealed trait HashSet[A]
 
   protected def removed0(key: A, hash: Int, level: Int): HashSet[A]
 
-  protected def computeHash(key: A): Int = improve(elemHashCode(key))
-
-  protected final def improve(hcode: Int): Int = {
-    var h: Int = hcode + ~(hcode << 9)
-    h = h ^ (h >>> 14)
-    h = h + (h << 4)
-    h ^ (h >>> 10)
-  }
-
-  protected final def elemHashCode(elem: A): Int = elem.##
-
 }
 
 object HashSet extends IterableFactory[HashSet] {
 
-  def fromIterable[A](it: collection.Iterable[A]): HashSet[A] = newBuilder[A].++=(it).result
+  def fromIterable[A](it: collection.Iterable[A]): HashSet[A] =
+    it match {
+      case hs: HashSet[A] => hs
+      case _ => empty ++ it
+    }
 
-  def newBuilder[A]: Builder[A, HashSet[A]] = new ImmutableSetBuilder[A, HashSet](empty[A])
-
-  override def empty[A <: Any]: HashSet[A] = EmptyHashSet.asInstanceOf[HashSet[A]]
+  def empty[A]: HashSet[A] = EmptyHashSet.asInstanceOf[HashSet[A]]
 
   private object EmptyHashSet extends HashSet[Any] {
 
@@ -99,6 +93,12 @@ object HashSet extends IterableFactory[HashSet] {
 
     def iterator(): Iterator[A] = Iterator.single(key)
 
+    override def foreach[U](f: A => U): Unit = f(key)
+
+    override def head: A = key
+
+    override def tail: HashSet[A] = HashSet.empty[A]
+
     override def size: Int = 1
 
     protected def get0(key: A, hash: Int, level: Int) =
@@ -123,6 +123,10 @@ object HashSet extends IterableFactory[HashSet] {
   private[immutable] final class HashSetCollision1[A](private[HashSet] val hash: Int, val ks: ListSet[A]) extends LeafHashSet[A] {
 
     override def size = ks.size
+
+    def iterator(): Iterator[A] = ks.iterator()
+
+    override def foreach[U](f: A => U): Unit = ks.foreach(f)
 
     protected def get0(key: A, hash: Int, level: Int) =
       if (hash == this.hash) ks.contains(key) else false
@@ -150,10 +154,7 @@ object HashSet extends IterableFactory[HashSet] {
         }
       } else this
 
-    def iterator: Iterator[A] = ks.iterator
-    override def foreach[U](f: A => U): Unit = ks.foreach(f)
-
-    private def writeObject(out: java.io.ObjectOutputStream) {
+    private def writeObject(out: java.io.ObjectOutputStream): Unit = {
       // this cannot work - reading things in might produce different
       // hash codes and remove the collision. however this is never called
       // because no references to this class are ever handed out to client code
@@ -162,7 +163,7 @@ object HashSet extends IterableFactory[HashSet] {
       //out.writeObject(kvs)
     }
 
-    private def readObject(in: java.io.ObjectInputStream) {
+    private def readObject(in: java.io.ObjectInputStream): Unit = {
       sys.error("cannot deserialize an immutable.HashSet where all items have the same 32-bit hash code")
       //kvs = in.readObject().asInstanceOf[ListSet[A]]
       //hash = computeHash(kvs.)
@@ -213,11 +214,19 @@ object HashSet extends IterableFactory[HashSet] {
     // assertion has to remain disabled until SI-6197 is solved
     // assert(elems.length > 1 || (elems.length == 1 && elems(0).isInstanceOf[HashTrieSet[_]]))
 
+    override def size = size0
+
     def iterator(): Iterator[A] = new TrieIterator[A](elems.asInstanceOf[Array[Iterable[A]]]) {
       final override def getElem(cc: AnyRef): A = cc.asInstanceOf[HashSet1[A]].key
     }
 
-    override def size = size0
+    override def foreach[U](f: A => U): Unit = {
+      var i = 0
+      while (i < elems.length) {
+        elems(i).foreach(f)
+        i += 1
+      }
+    }
 
     protected def get0(key: A, hash: Int, level: Int) = {
       val index = (hash >>> level) & 0x1f
@@ -240,8 +249,7 @@ object HashSet extends IterableFactory[HashSet] {
         val subNew = sub.updated0(key, hash, level + 5)
         if (sub eq subNew) this
         else {
-          val elemsNew = new Array[HashSet[A]](elems.length)
-          Array.copy(elems, 0, elemsNew, 0, elems.length)
+          val elemsNew = java.util.Arrays.copyOf(elems, elems.length)
           elemsNew(offset) = subNew
           new HashTrieSet(bitmap, elemsNew, size + (subNew.size - sub.size))
         }
@@ -281,8 +289,7 @@ object HashSet extends IterableFactory[HashSet] {
         } else if(elems.length == 1 && !subNew.isInstanceOf[HashTrieSet[_]]) {
           subNew
         } else {
-          val elemsNew = new Array[HashSet[A]](elems.length)
-          Array.copy(elems, 0, elemsNew, 0, elems.length)
+          val elemsNew = java.util.Arrays.copyOf(elems, elems.length)
           elemsNew(offset) = subNew
           val sizeNew = size + (subNew.size - sub.size)
           new HashTrieSet(bitmap, elemsNew, sizeNew)
@@ -321,6 +328,6 @@ object HashSet extends IterableFactory[HashSet] {
     * In many internal operations the empty set is represented as null for performance reasons. This method converts
     * null to the empty set for use in public methods
     */
-  @inline private def nullToEmpty[A](s: HashSet[A]): HashSet[A] = if (s eq null) empty[A] else s
+  @`inline` private def nullToEmpty[A](s: HashSet[A]): HashSet[A] = if (s eq null) empty[A] else s
 
 }

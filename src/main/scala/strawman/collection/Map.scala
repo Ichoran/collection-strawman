@@ -1,60 +1,88 @@
-package strawman.collection
+package strawman
+package collection
 
-import strawman.collection.mutable.Builder
+import collection.mutable.Builder
 
-import scala.{Option, Any, Nothing}
+import scala.{Any, Boolean, `inline`, None, NoSuchElementException, Nothing, Option, Ordering, PartialFunction, Some}
 import scala.annotation.unchecked.uncheckedVariance
-import scala.Predef.???
 
 /** Base Map type */
-trait Map[K, +V]
-  extends Iterable[(K, V)]
-    with MapLike[K, V, Map]
+trait Map[K, +V] extends Iterable[(K, V)] with MapOps[K, V, Map, Map[K, V]]
 
 /** Base Map implementation type */
-trait MapLike[K, +V, +C[X, Y] <: Map[X, Y]]
-  extends IterableLike[(K, V), Iterable]
-    with IterableMonoTransforms[(K, V), C[K, V @uncheckedVariance]]
-    with MapPolyTransforms[K, V, C] {
+trait MapOps[K, +V, +CC[X, Y] <: Map[X, Y], +C <: Map[K, V]]
+  extends IterableOps[(K, V), Iterable, C]
+     with PartialFunction[K, V] {
 
+  protected def coll: Map[K, V]
+
+  /** Similar to fromIterable, but returns a Map collection type */
+  protected[this] def mapFromIterable[K2, V2](it: Iterable[(K2, V2)]): CC[K2, V2]
+
+  /** Optionally returns the value associated with a key.
+    *
+    *  @param  key    the key value
+    *  @return an option value containing the value associated with `key` in this map,
+    *          or `None` if none exists.
+    */
   def get(key: K): Option[V]
 
+  /** Retrieves the value which is associated with the given key. This
+    *  method invokes the `default` method of the map if there is no mapping
+    *  from the given key to a value. Unless overridden, the `default` method throws a
+    *  `NoSuchElementException`.
+    *
+    *  @param  key the key
+    *  @return     the value associated with the given key, or the result of the
+    *              map's `default` method, if none exists.
+    */
+  def apply(key: K): V = get(key) match {
+    case None => default(key)
+    case Some(value) => value
+  }
+
+  /** Defines the default value computation for the map,
+    *  returned when a key is not found
+    *  The method implemented here throws an exception,
+    *  but it might be overridden in subclasses.
+    *
+    *  @param key the given key value for which a binding is missing.
+    *  @throws NoSuchElementException
+    */
+  def default(key: K): V =
+    throw new NoSuchElementException("key not found: " + key)
+
+  /** Tests whether this map contains a binding for a key.
+    *
+    *  @param key the key
+    *  @return    `true` if there is a binding for `key` in this map, `false` otherwise.
+    */
+  def contains(key: K): Boolean = get(key).isDefined
+
+
+  /** Tests whether this map contains a binding for a key. This method,
+    *  which implements an abstract method of trait `PartialFunction`,
+    *  is equivalent to `contains`.
+    *
+    *  @param key the key
+    *  @return    `true` if there is a binding for `key` in this map, `false` otherwise.
+    */
+  def isDefinedAt(key: K): Boolean = contains(key)
+
+  /** The empty map of the same type as this map
+    * @return an empty map of type `Repr`.
+    */
+  def empty: C
+
+  def map[K2, V2](f: ((K, V)) => (K2, V2)): CC[K2, V2] = mapFromIterable(View.Map(coll, f))
+
+  def flatMap[K2, V2](f: ((K, V)) => IterableOnce[(K2, V2)]): CC[K2, V2] = mapFromIterable(View.FlatMap(coll, f))
+
+  def concat [V2 >: V](xs: collection.Iterable[(K, V2)]): CC[K, V2] = mapFromIterable(View.Concat(coll, xs))
+
+  /** Alias for `concat` */
+  /*@`inline` final*/ def ++ [V2 >: V](xs: collection.Iterable[(K, V2)]): CC[K, V2] = concat(xs)
+
 }
 
-/** Polymorphic transformation methods */
-trait MapPolyTransforms[K, +V, +C[X, Y] <: Map[X, Y]] extends IterablePolyTransforms[(K, V), Iterable] {
-
-  def map[K2, V2](f: (K, V) => (K2, V2)): C[K2, V2]
-
-  def flatMap[K2, V2](f: (K, V) => IterableOnce[(K2, V2)]): C[K2, V2]
-
-}
-
-/** Factory methods for collections of kind `* −> * -> *` */
-trait MapFactory[+C[_, _]] { self =>
-  def newBuilder[K, V]: Builder[(K, V), C[K, V]]
-
-  def fromIterable[K, V](it: Iterable[(K, V)]): C[K, V] =
-    newBuilder[K, V].++=(it).result
-
-  def empty[K, V]: C[K, V] =
-    newBuilder[K, V].result
-
-  def apply[K, V](elems: (K, V)*): C[K, V] =
-    newBuilder[K, V].++=(elems.toStrawman).result
-}
-
-/** Factory methods for collections of kind `* −> * -> *` which require an implicit evidence value for the key type */
-trait ConstrainedMapFactory[+C[_, _], Ev[_]] { self =>
-
-  def constrainedNewBuilder[K : Ev, V]: Builder[(K, V), C[K, V]]
-
-  def constrainedFromIterable[K : Ev, V](it: Iterable[(K, V)]): C[K, V] =
-    constrainedNewBuilder[K, V].++=(it).result
-
-  def empty[K : Ev, V]: C[K, V] =
-    constrainedNewBuilder[K, V].result
-
-  def apply[K : Ev, V](elems: (K, V)*): C[K, V] =
-    constrainedNewBuilder[K, V].++=(elems.toStrawman).result
-}
+object Map extends MapFactory.Delegate[Map](immutable.Map)

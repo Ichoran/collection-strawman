@@ -1,20 +1,18 @@
-package strawman.collection.mutable
+package strawman
+package collection
+package mutable
 
 import java.lang.IndexOutOfBoundsException
 
 import scala.{AnyRef, Array, Boolean, Exception, Int, Long, StringContext, Unit, math, Any}
-import strawman.collection
-import strawman.collection.{IndexedView, IterableFactory, IterableOnce, SeqLike, MonoBuildable, PolyBuildable}
-
 import scala.Predef.intWrapper
 
 /** Concrete collection type: ArrayBuffer */
 class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
   extends IndexedOptimizedGrowableSeq[A]
-    with SeqLike[A, ArrayBuffer]
-    with MonoBuildable[A, ArrayBuffer[A]]
-    with PolyBuildable[A, ArrayBuffer]
-    with Builder[A, ArrayBuffer[A]] {
+     with SeqOps[A, ArrayBuffer, ArrayBuffer[A]]
+     with Buildable[A, ArrayBuffer[A]]
+     with Builder[A, ArrayBuffer[A]] {
 
   def this() = this(new Array[AnyRef](16), 0)
 
@@ -47,16 +45,16 @@ class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
 
   def iterator() = view.iterator()
 
-  def fromIterable[B](it: collection.Iterable[B]): ArrayBuffer[B] =
-    ArrayBuffer.fromIterable(it)
+  def iterableFactory = ArrayBuffer
 
-  protected[this] def newBuilderWithSameElemType = new ArrayBuffer[A]
-  def newBuilder[E] = new ArrayBuffer[E]
+  protected[this] def fromSpecificIterable(coll: collection.Iterable[A]): ArrayBuffer[A] = fromIterable(coll)
+
+  protected[this] def newBuilder = new ArrayBuffer[A]
 
   def clear() =
     end = 0
 
-  def +=(elem: A): this.type = {
+  def add(elem: A): this.type = {
     ensureSize(end + 1)
     this(end) = elem
     end += 1
@@ -64,18 +62,18 @@ class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
   }
 
   /** Overridden to use array copying for efficiency where possible. */
-  override def ++=(elems: IterableOnce[A]): this.type = {
+  override def addAll(elems: IterableOnce[A]): this.type = {
     elems match {
       case elems: ArrayBuffer[_] =>
         ensureSize(length + elems.length)
         Array.copy(elems.array, 0, array, length, elems.length)
         end = length + elems.length
-      case _ => super.++=(elems)
+      case _ => super.addAll(elems)
     }
     this
   }
 
-  def result = this
+  def result() = this
 
   def insert(idx: Int, elem: A): Unit = {
     checkWithinBounds(idx, idx)
@@ -126,7 +124,7 @@ class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
   override def className = "ArrayBuffer"
 }
 
-object ArrayBuffer extends IterableFactory[ArrayBuffer] {
+object ArrayBuffer extends IterableFactoryWithBuilder[ArrayBuffer] {
 
   /** Avoid reallocation of buffer if length is known. */
   def fromIterable[B](coll: collection.Iterable[B]): ArrayBuffer[B] =
@@ -138,8 +136,9 @@ object ArrayBuffer extends IterableFactory[ArrayBuffer] {
     }
     else new ArrayBuffer[B] ++= coll
 
-  def newBuilder[A]: Builder[A, ArrayBuffer[A]] = new ArrayBuffer[A]()
+  def newBuilder[A](): Builder[A, ArrayBuffer[A]] = new ArrayBuffer[A]()
 
+  def empty[A]: ArrayBuffer[A] = new ArrayBuffer[A]()
 }
 
 class ArrayBufferView[A](val array: Array[AnyRef], val length: Int) extends IndexedView[A] {

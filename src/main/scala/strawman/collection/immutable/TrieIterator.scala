@@ -1,6 +1,7 @@
 package strawman
 
-package collection.immutable
+package collection
+package immutable
 
 //import HashMap.{ HashTrieMap, HashMapCollision1, HashMap1 }
 import HashSet.{HashSet1, HashSetCollision1, HashTrieSet}
@@ -55,14 +56,14 @@ private[collection] abstract class TrieIterator[+T](elems: Array[Iterable[T]]) e
     case _                                  => false
   }
 
-  final class DupIterator(xs: Array[Iterable[T]]) extends {
-    override val initDepth                                     = outer.depth
-    override val initArrayStack: Array[Array[Iterable[T @uV]]] = outer.arrayStack
-    override val initPosStack                                  = outer.posStack
-    override val initArrayD: Array[Iterable[T @uV]]            = outer.arrayD
-    override val initPosD                                      = outer.posD
-    override val initSubIter                                   = outer.subIter
-  } with TrieIterator[T](xs) {
+  final class DupIterator(xs: Array[Iterable[T]] @uV) extends TrieIterator[T](xs) {
+    override def initDepth                                     = outer.depth
+    override def initArrayStack: Array[Array[Iterable[T @uV]]] = outer.arrayStack
+    override def initPosStack                                  = outer.posStack
+    override def initArrayD: Array[Iterable[T @uV]]            = outer.arrayD
+    override def initPosD                                      = outer.posD
+    override def initSubIter                                   = outer.subIter
+
     final override def getElem(x: AnyRef): T = outer.getElem(x)
   }
 
@@ -73,7 +74,7 @@ private[collection] abstract class TrieIterator[+T](elems: Array[Iterable[T]]) e
   }
 
   private[this] def iteratorWithSize(arr: Array[Iterable[T]]): (Iterator[T], Int) =
-    (newIterator(arr), (arr.map(_.size): strawman.collection.IterableOps[Int]).sum)
+    (newIterator(arr), (arr.map(_.size): strawman.collection.IterableOps[Int, Iterable, _]).sum)
 
   private[this] def arrayToIterators(arr: Array[Iterable[T]]): SplitIterators = {
     val (fst, snd) = arr.splitAt(arr.length / 2)
@@ -132,7 +133,7 @@ private[collection] abstract class TrieIterator[+T](elems: Array[Iterable[T]]) e
       next0(getElems(m), 0)
     }
     else {
-      subIter = m.iterator
+      subIter = m.iterator()
       next()
     }
     // The much slower version:

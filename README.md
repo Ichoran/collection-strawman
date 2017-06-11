@@ -27,6 +27,10 @@ resolvers += Resolver.sonatypeRepo("snapshots")
 libraryDependencies += "ch.epfl.scala" %% "collection-strawman" % "0.2.0-SNAPSHOT"
 ~~~
 
+## Contributing
+
+See the [CONTRIBUTING](CONTRIBUTING.md) file.
+
 ## Implemented collection types
 
 - [x] `List`
@@ -36,55 +40,71 @@ libraryDependencies += "ch.epfl.scala" %% "collection-strawman" % "0.2.0-SNAPSHO
 - [x] `ArrayOps`
 - [x] `StringOps`
 - [x] `ArrayBuffer`
+- [x] `ImmutableArray` (new)
 - [x] `ListBuffer`
 - [ ] `UnrolledBuffer`
 - [ ] `LinkedList`
 - [ ] `DoubleLinkedList`
-- [ ] `Range` / `NumericRange`
-- [ ] `HashMap`
-- [ ] `TreeMap`
+- [x] `Range` / `NumericRange`
+- [ ] `Vector`
+- [x] `HashMap`
+- [x] `TreeMap`
 - [ ] `IntMap` / `LongMap` (?)
-- [ ] `ListMap`
+- [x] `ListMap`
 - [ ] `MultiMap`
-- [ ] `HashSet`
-- [ ] `ListSet`
-- [ ] `TreeSet`
+- [x] `HashSet`
+- [x] `ListSet`
+- [x] `TreeSet`
 - [ ] `EqSet`
 - [ ] `BitSet`
 - [x] `View`
 
 ## Implemented operations (on the relevant collection types)
 
-### Terminal operations
+### Operations not returning a collection
 
+- [x] `apply`
+- [x] `contains`
+- [x] `firstKey`
 - [x] `forall`
 - [x] `foreach`
 - [x] `foldLeft`
 - [x] `foldRight`
+- [x] `get`
 - [x] `head`
 - [x] `indexWhere`
+- [x] `isDefinedAt`
 - [x] `isEmpty` / `nonEmpty`
+- [x] `keysIteratorFrom`
 - [x] `last`
+- [x] `lastKey`
 - [x] `mkString`
 - [x] `size`
 - [x] `sum`
 - [x] `to`
 
-### Transformations keeping the same element type
+### Transformations to collections having the same element type
 
 - [x] `drop`
-- [x] `filter`
+- [x] `empty`
+- [x] `filter` / `filterNot`
+- [ ] `groupBy`
+- [x] `intersect`
 - [x] `partition`
+- [x] `range`
+- [x] `rangeImpl`
+- [x] `slice`
 - [x] `splitAt`
 - [x] `tail`
 - [x] `take`
-- [ ] `groupBy`
+- [x] `updated`
 
 ### Transformations to collections that can have a different element type
 
-- [x] `++` / `concat`
+- [x] `++` / `concat` / `union`
 - [x] `flatMap`
 - [x] `map`
+- [x] `merged`
 - [x] `zip`
 
 ### In-place mutating operations

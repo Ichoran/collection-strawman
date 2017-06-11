@@ -1,9 +1,10 @@
-package strawman.collection.mutable
+package strawman.collection
+package mutable
 
+import scala.annotation.unchecked.uncheckedVariance
 import scala.{Any, Int, Unit, Boolean}
 import scala.Int._
 import strawman.collection
-import strawman.collection.{Iterator, IterableOnce, IterableFactory, SeqLike, MonoBuildable, PolyBuildable}
 import strawman.collection.immutable.{List, Nil, ::}
 import scala.annotation.tailrec
 import java.lang.IndexOutOfBoundsException
@@ -12,10 +13,9 @@ import scala.Predef.{assert, intWrapper}
 /** Concrete collection type: ListBuffer */
 class ListBuffer[A]
   extends Seq[A]
-    with SeqLike[A, ListBuffer]
-    with MonoBuildable[A, ListBuffer[A]]
-    with PolyBuildable[A, ListBuffer]
-    with Builder[A, ListBuffer[A]] {
+     with SeqOps[A, ListBuffer, ListBuffer[A]]
+     with Buildable[A, ListBuffer[A]]
+     with Builder[A, ListBuffer[A]] {
 
   private var first: List[A] = Nil
   private var last0: ::[A] = null
@@ -26,18 +26,19 @@ class ListBuffer[A]
 
   def iterator() = first.iterator()
 
-  def fromIterable[B](coll: collection.Iterable[B]) = ListBuffer.fromIterable(coll)
+  def iterableFactory = ListBuffer
+
+  protected[this] def fromSpecificIterable(coll: collection.Iterable[A]): ListBuffer[A] = fromIterable(coll)
 
   def apply(i: Int) = first.apply(i)
 
   def length = len
   override def knownSize = len
 
-  protected[this] def newBuilderWithSameElemType = new ListBuffer[A]
-  def newBuilder[E] = new ListBuffer[E]
+  protected[this] def newBuilder = new ListBuffer[A]
 
   private def copyElems(): Unit = {
-    val buf = ListBuffer.fromIterable(result)
+    val buf = ListBuffer.fromIterable(result())
     first = buf.first
     last0 = buf.last0
     aliased = false
@@ -55,7 +56,7 @@ class ListBuffer[A]
     first = Nil
   }
 
-  def +=(elem: A) = {
+  def add(elem: A) = {
     ensureUnaliased()
     val last1 = (elem :: Nil).asInstanceOf[::[A]]
     if (len == 0) first = last1 else last0.next = last1
@@ -106,7 +107,7 @@ class ListBuffer[A]
     val follow = getNext(prev)
     while (it.hasNext) {
       len += 1
-      val next = (it.next :: follow).asInstanceOf[::[A]]
+      val next = (it.next() :: follow).asInstanceOf[::[A]]
       setNext(prev, next)
       prev = next
     }
@@ -194,15 +195,16 @@ class ListBuffer[A]
     this
   }
 
-  def result = this
+  def result() = this
 
   override def className = "ListBuffer"
 }
 
-object ListBuffer extends IterableFactory[ListBuffer] {
+object ListBuffer extends IterableFactoryWithBuilder[ListBuffer] {
 
   def fromIterable[A](coll: collection.Iterable[A]): ListBuffer[A] = new ListBuffer[A] ++= coll
 
-  def newBuilder[A]: Builder[A, ListBuffer[A]] = new ListBuffer[A]
+  def newBuilder[A](): Builder[A, ListBuffer[A]] = new ListBuffer[A]
 
+  def empty[A]: ListBuffer[A] = new ListBuffer[A]
 }

@@ -1,6 +1,6 @@
 package bench
 
-import strawman.collection.immutable.{LazyList, List}
+import strawman.collection.immutable.{LazyList, List, Range, NumericRange}
 
 import scala.{Any, AnyRef, App, Int, Long, Seq, StringContext}
 import scala.Predef.{ArrowAssoc, println, intWrapper}
@@ -37,13 +37,19 @@ object MemoryFootprint extends App {
 
   val memories =
     scala.Predef.Map(
-      "scala.List"  -> benchmark(scala.List.fill(_)(obj)),
-      "List"        -> benchmark(List.fill(_)(obj)),
-      "LazyList"    -> benchmark(LazyList.fill(_)(obj)),
+      "scala.List"    -> benchmark(scala.List.fill(_)(obj)),
+      "List"          -> benchmark(List.fill(_)(obj)),
+      "LazyList"      -> benchmark(LazyList.fill(_)(obj)),
       "scala.HashSet" -> benchmark(n => scala.collection.immutable.HashSet((1 to n).map(_.toString): _*)),
-      "HashSet"     -> benchmark(n => scala.collection.immutable.HashSet((1 to n).map(_.toString): _*)),
-      "ArrayBuffer" -> benchmark(ArrayBuffer.fill(_)(obj)),
-      "ListBuffer"  -> benchmark(ListBuffer.fill(_)(obj))
+      "HashSet"       -> benchmark(n => strawman.collection.immutable.HashSet((1 to n).map(_.toString): _*)),
+      "scala.TreeSet" -> benchmark(n => scala.collection.immutable.TreeSet((1 to n).map(_.toString): _*)),
+      "TreeSet"       -> benchmark(n => strawman.collection.immutable.TreeSet((1 to n).map(_.toString): _*)),
+      "ArrayBuffer"   -> benchmark(ArrayBuffer.fill(_)(obj)),
+      "ListBuffer"    -> benchmark(ListBuffer.fill(_)(obj)),
+      "ImmutableArray" -> benchmark(strawman.collection.immutable.ImmutableArray.fill(_)(obj)),
+      "ImmutableArray (primitive)" -> benchmark(strawman.collection.immutable.ImmutableArray.fill(_)(123)),
+      "Range"         -> benchmark(Range(0, _)),
+      "NumericRange"  -> benchmark(NumericRange(0, _, 1))
     )
 
   // We use a format similar to the one used by JMH so that

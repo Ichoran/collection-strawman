@@ -1,30 +1,20 @@
 package strawman
 package collection
 
-import scala.{Any, Boolean, Equals, inline, Int}
+import scala.{Any, Boolean, Equals, `inline`, Int}
 import scala.util.hashing.MurmurHash3
 
 /** Base trait for set collections.
-  *
-  * A set is a collection that contains no duplicate elements.
-  *
-  * @author Martin Odersky
-  * @author Aleksandar Prokopec
-  * @since 2.9
   */
-trait Set[A]
-  extends Iterable[A]
-    with SetLike[A, Set]
+trait Set[A] extends Iterable[A] with SetOps[A, Set, Set[A]]
 
 /** Base trait for set operations */
-trait SetLike[A, +C[X] <: Set[X]]
-  extends IterableLike[A, C]
-    with SetMonoTransforms[A, C[A]]
-    with SetPolyTransforms[A, C]
-    with (A => Boolean)
-    with Equals {
+trait SetOps[A, +CC[X], +C <: Set[A]]
+  extends IterableOps[A, CC, C]
+     with (A => Boolean)
+     with Equals {
 
-  protected def coll: C[A]
+  protected def coll: C
 
   def contains(elem: A): Boolean
 
@@ -34,7 +24,7 @@ trait SetLike[A, +C[X] <: Set[X]]
     *  @param elem the element to test for membership.
     *  @return  `true` if `elem` is contained in this set, `false` otherwise.
     */
-  @inline final def apply(elem: A): Boolean = this.contains(elem)
+  @`inline` final def apply(elem: A): Boolean = this.contains(elem)
 
   def subsetOf(that: Set[A]): Boolean = this.forall(that)
 
@@ -52,25 +42,55 @@ trait SetLike[A, +C[X] <: Set[X]]
 
   override def hashCode(): Int = Set.setHash(coll)
 
+  /** Computes the intersection between this set and another set.
+    *
+    *  @param   that  the set to intersect with.
+    *  @return  a new set consisting of all elements that are both in this
+    *  set and in the given set `that`.
+    */
+  def intersect(that: Set[A]): C = this.filter(that)
+
+  /** Alias for `intersect` */
+  @`inline` final def & (that: Set[A]): C = intersect(that)
+
+  /** Creates a new $coll by adding all elements contained in another collection to this $coll, omitting duplicates.
+    *
+    * This method takes a collection of elements and adds all elements, omitting duplicates, into $coll.
+    *
+    * Example:
+    *  {{{
+    *    scala> val a = Set(1, 2) concat Set(2, 3)
+    *    a: scala.collection.immutable.Set[Int] = Set(1, 2, 3)
+    *  }}}
+    *
+    *  @param that     the collection containing the elements to add.
+    *  @return a new $coll with the given elements added, omitting duplicates.
+    */
+  def concat(that: collection.IterableOnce[A]): C = fromSpecificIterable(View.Concat(coll, that))
+
+  /** Alias for `concat` */
+  @`inline` final def ++ (that: collection.IterableOnce[A]): C = concat(that)
+
+  /** Computes the union between of set and another set.
+    *
+    *  @param   that  the set to form the union with.
+    *  @return  a new set consisting of all elements that are in this
+    *  set or in the given set `that`.
+    */
+  @`inline` final def union(that: collection.IterableOnce[A]): C = concat(that)
+
+  /** Alias for `union` */
+  @`inline` final def | (that: collection.IterableOnce[A]): C = concat(that)
+
+  /** The empty set of the same type as this set
+    * @return  an empty set of type `C`.
+    */
+  def empty: C
 }
 
-/** Monomorphic transformation operations */
-trait SetMonoTransforms[A, +Repr]
-  extends IterableMonoTransforms[A, Repr] {
+object Set extends IterableFactory.Delegate[Set](immutable.Set) {
 
-  def & (that: Set[A]): Repr = this.filter(that)
-
-}
-
-trait SetPolyTransforms[A, +C[X]] extends IterablePolyTransforms[A, C] {
-
-  def ++ (that: Set[A]): C[A]
-
-}
-
-// Temporary, TODO move to MurmurHash3
-object Set {
-
+  // Temporary, TODO move to MurmurHash3
   def setHash(xs: Set[_]): Int = unorderedHash(xs, "Set".##)
 
   final def unorderedHash(xs: Iterable[_], seed: Int): Int = {
