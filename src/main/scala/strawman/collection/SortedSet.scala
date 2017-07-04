@@ -1,6 +1,5 @@
 package strawman.collection
 
-import strawman.collection.mutable.Builder
 import scala.{Ordering, `inline`}
 import scala.annotation.unchecked.uncheckedVariance
 
@@ -9,7 +8,7 @@ trait SortedSet[A] extends Set[A] with SortedSetOps[A, SortedSet, SortedSet[A]]
 
 trait SortedSetOps[A, +CC[X], +C <: SortedSet[A]]
   extends SetOps[A, Set, C]
-     with SortedOps[A, C] {
+     with SortedOps[A, CC, C] {
 
   protected[this] def sortedFromIterable[B: Ordering](it: Iterable[B]): CC[B]
 
@@ -27,7 +26,7 @@ trait SortedSetOps[A, +CC[X], +C <: SortedSet[A]]
   // sound bcs of VarianceNote
 
   def collect[B: Ordering](pf: scala.PartialFunction[A, B]): CC[B] = flatMap(a =>
-    if (pf.isDefinedAt(a)) View.Elems(pf(a))
+    if (pf.isDefinedAt(a)) View.Single(pf(a))
     else View.Empty
   )
 }

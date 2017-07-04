@@ -1,11 +1,13 @@
 package strawman.collection.immutable
 
 import strawman.collection
-import strawman.collection.{IterableFactory, Iterator}
+import strawman.collection.{IterableFactory, IterableOnce, Iterator, StrictOptimizedIterableOps}
 
-import scala.{Any, Boolean, ClassCastException, IllegalArgumentException, IndexOutOfBoundsException, `inline`, Int, Integral, math, Numeric, Ordering, Serializable, specialized, StringContext, Unit}
+import scala.{Any, Boolean, ClassCastException, IllegalArgumentException, IndexOutOfBoundsException, Int, Integral, Numeric, Ordering, Serializable, StringContext, Unit, `inline`, math, specialized}
 import scala.Predef.ArrowAssoc
 import java.lang.String
+
+import strawman.collection.mutable.Builder
 
 /** `NumericRange` is a more generic version of the
   *  `Range` class which works with arbitrary types.
@@ -38,13 +40,16 @@ final class NumericRange[T](
 )
   extends IndexedSeq[T]
     with IndexedSeqOps[T, IndexedSeq, IndexedSeq[T]]
+    with StrictOptimizedIterableOps[T, IndexedSeq[T]]
     with Serializable {
 
   def iterator(): Iterator[T] = new NumericRangeIterator[T](start, step, last, isEmpty)
 
-  def iterableFactory: IterableFactory[IndexedSeq] = ImmutableArray // FIXME Use Vector instead of Array
+  def iterableFactory: IterableFactory[IndexedSeq] = IndexedSeq
 
   protected[this] def fromSpecificIterable(it: collection.Iterable[T]): IndexedSeq[T] = fromIterable(it)
+
+  protected[this] def newSpecificBuilder(): Builder[T, IndexedSeq[T]] = IndexedSeq.newBuilder()
 
   /** Note that NumericRange must be invariant so that constructs
     *  such as "1L to 10 by 5" do not infer the range type as AnyVal.
@@ -129,17 +134,17 @@ final class NumericRange[T](
 
   import NumericRange.defaultOrdering
 
-//  override def min[T1 >: T](implicit ord: Ordering[T1]): T =
-//    if (ord eq defaultOrdering(num)) {
-//      if (num.signum(step) > 0) start
-//      else last
-//    } else super.min(ord)
-//
-//  override def max[T1 >: T](implicit ord: Ordering[T1]): T =
-//    if (ord eq defaultOrdering(num)) {
-//      if (num.signum(step) > 0) last
-//      else start
-//    } else super.max(ord)
+  override def min[T1 >: T](implicit ord: Ordering[T1]): T =
+    if (ord eq defaultOrdering(num)) {
+      if (num.signum(step) > 0) start
+      else last
+    } else super.min(ord)
+
+  override def max[T1 >: T](implicit ord: Ordering[T1]): T =
+    if (ord eq defaultOrdering(num)) {
+      if (num.signum(step) > 0) last
+      else start
+    } else super.max(ord)
 
   // Motivated by the desire for Double ranges with BigDecimal precision,
   // we need some way to map a Range and get another Range.  This can't be
@@ -187,7 +192,7 @@ final class NumericRange[T](
   def containsTyped(x: T): Boolean =
     isWithinBoundaries(x) && (((x - start) % step) == zero)
 
-  /*override*/ def contains[A1 >: T](x: A1): Boolean =
+  override def contains[A1 >: T](x: A1): Boolean =
     try containsTyped(x.asInstanceOf[T])
     catch { case _: ClassCastException => false }
 

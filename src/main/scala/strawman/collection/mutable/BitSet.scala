@@ -28,6 +28,7 @@ class BitSet(protected[collection] final var elems: Array[Long])
     with collection.BitSet
     with SortedSetOps[Int, SortedSet, BitSet]
     with collection.BitSetOps[BitSet]
+    with StrictOptimizedIterableOps[Int, BitSet]
     with Serializable {
 
   def this(initSize: Int) = this(new Array[Long](math.max((initSize + 63) >> 6, 1)))
@@ -36,11 +37,15 @@ class BitSet(protected[collection] final var elems: Array[Long])
 
   def iterableFactory = Set
 
+  def sortedIterableFactory = SortedSet
+
   protected[this] def sortedFromIterable[B : Ordering](it: collection.Iterable[B]): collection.mutable.SortedSet[B] =
     collection.mutable.SortedSet.sortedFromIterable(it)
 
   protected[this] def fromSpecificIterable(coll: collection.Iterable[Int]): BitSet =
     BitSet.fromSpecificIterable(coll)
+
+  protected[this] def newSpecificBuilder(): Builder[Int, BitSet] = BitSet.newBuilder()
 
   protected[collection] final def nwords: Int = elems.length
 
@@ -103,5 +108,7 @@ object BitSet extends SpecificIterableFactory[Int, BitSet] {
   def fromSpecificIterable(it: strawman.collection.Iterable[Int]): BitSet = Growable.fromIterable(empty, it)
 
   def empty: BitSet = new BitSet()
+
+  def newBuilder(): Builder[Int, BitSet] = new GrowableBuilder(empty)
 
 }

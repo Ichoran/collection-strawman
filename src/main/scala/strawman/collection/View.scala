@@ -1,7 +1,9 @@
 package strawman.collection
 
+import strawman.collection.mutable.{ArrayBuffer, Builder}
+
 import scala.{Any, Boolean, Equals, Int, Nothing, annotation}
-import scala.Predef.intWrapper
+import scala.Predef.{<:<, intWrapper}
 
 /** Concrete collection type: View */
 trait View[+A] extends Iterable[A] with IterableOps[A, View, View[A]] {
@@ -9,8 +11,12 @@ trait View[+A] extends Iterable[A] with IterableOps[A, View, View[A]] {
 
   def iterableFactory = View
 
-  override protected[this] def fromSpecificIterable(coll: Iterable[A]): View[A] =
-    fromIterable(coll)
+  protected[this] def fromSpecificIterable(coll: Iterable[A]): View[A] = fromIterable(coll)
+
+  protected[this] def newSpecificBuilder(): Builder[A, View[A]] =
+    immutable.IndexedSeq.newBuilder().mapResult(_.view)
+
+  override def toString = "View(?)"
 
   override def className = "View"
 }
@@ -29,12 +35,30 @@ object View extends IterableFactory[View] {
   }
 
   def empty[A]: View[A] = Empty
+
+  def newBuilder[A](): Builder[A, View[A]] = ArrayBuffer.newBuilder[A]().mapResult(fromIterable)
+
   override def apply[A](xs: A*): View[A] = Elems(xs: _*)
 
   /** The empty view */
   case object Empty extends View[Nothing] {
     def iterator() = Iterator.empty
     override def knownSize = 0
+  }
+
+  /** A view with exactly one element */
+  case class Single[A](a: A) extends View[A] {
+    def iterator(): Iterator[A] =
+      new Iterator[A] {
+        private var notConsumed: Boolean = true
+        def next(): A =
+          if (notConsumed) {
+            notConsumed = false
+            a
+          } else Iterator.empty.next()
+        def hasNext: Boolean = notConsumed
+      }
+    override def knownSize: Int = 1
   }
 
   /** A view with given elements */
@@ -68,12 +92,12 @@ object View extends IterableFactory[View] {
     /** The view consisting of all elements of the underlying collection
      *  that satisfy `p`.
      */
-    val left = Partitioned(this, true)
+    val first = Partitioned(this, true)
 
     /** The view consisting of all elements of the underlying collection
      *  that do not satisfy `p`.
      */
-    val right = Partitioned(this, false)
+    val second = Partitioned(this, false)
   }
 
   /** A view representing one half of a partition. */
@@ -89,12 +113,42 @@ object View extends IterableFactory[View] {
       if (underlying.knownSize >= 0) (underlying.knownSize - normN) max 0 else -1
   }
 
+  /** A view that drops trailing elements of the underlying collection. */
+  case class DropRight[A](underlying: Iterable[A], n: Int) extends View[A] {
+    def iterator() = underlying.iterator().dropRight(n)
+    protected val normN = n max 0
+    override def knownSize =
+      if (underlying.knownSize >= 0) (underlying.knownSize - normN) max 0 else -1
+  }
+
+  case class DropWhile[A](underlying: Iterable[A], p: A => Boolean) extends View[A] {
+    def iterator() = underlying.iterator().dropWhile(p)
+  }
+
   /** A view that takes leading elements of the underlying collection. */
   case class Take[A](underlying: Iterable[A], n: Int) extends View[A] {
     def iterator() = underlying.iterator().take(n)
     protected val normN = n max 0
     override def knownSize =
       if (underlying.knownSize >= 0) underlying.knownSize min normN else -1
+  }
+
+  /** A view that takes trailing elements of the underlying collection. */
+  case class TakeRight[A](underlying: Iterable[A], n: Int) extends View[A] {
+    def iterator() = underlying.iterator().takeRight(n)
+    protected val normN = n max 0
+    override def knownSize =
+      if (underlying.knownSize >= 0) underlying.knownSize min normN else -1
+  }
+
+  case class TakeWhile[A](underlying: Iterable[A], p: A => Boolean) extends View[A] {
+    def iterator(): Iterator[A] = underlying.iterator().takeWhile(p)
+  }
+
+  case class ScanLeft[A, B](underlying: Iterable[A], z: B, op: (B, A) => B) extends View[B] {
+    def iterator(): Iterator[B] = underlying.iterator().scanLeft(z)(op)
+    override def knownSize: Int =
+      if (underlying.knownSize >= 0) underlying.knownSize + 1 else -1
   }
 
   /** A view that maps elements of the underlying collection. */
@@ -131,6 +185,69 @@ object View extends IterableFactory[View] {
       case _ => -1
     }
   }
+
+  /** A view that appends an element to its elements */
+  case class Append[A](underlying: Iterable[A], elem: A) extends View[A] {
+    def iterator(): Iterator[A] = Concat(underlying, View.Single(elem)).iterator()
+    override def knownSize: Int = if (underlying.knownSize >= 0) underlying.knownSize + 1 else -1
+  }
+
+  /** A view that prepends an element to its elements */
+  case class Prepend[A](elem: A, underlying: Iterable[A]) extends View[A] {
+    def iterator(): Iterator[A] = Concat(View.Single(elem), underlying).iterator()
+    override def knownSize: Int = if (underlying.knownSize >= 0) underlying.knownSize + 1 else -1
+  }
+
+  case class Updated[A](underlying: Iterable[A], index: Int, elem: A) extends View[A] {
+    def iterator(): Iterator[A] =
+      new Iterator[A] {
+        private val it = underlying.iterator()
+        private var i = 0
+        def next(): A = {
+          val value =
+            if (i == index) { it.next(); elem } else it.next()
+          i += 1
+          value
+        }
+        def hasNext: Boolean = it.hasNext
+      }
+  }
+
+  case class ZipWithIndex[A](underlying: Iterable[A]) extends View[(A, Int)] {
+    def iterator(): Iterator[(A, Int)] = underlying.iterator().zipWithIndex
+    override def knownSize: Int = underlying.knownSize
+  }
+
+  case class Unzip[A, A1, A2](underlying: Iterable[A])(implicit asPair: A <:< (A1, A2)) {
+    val first: View[A1] =
+      new View[A1] {
+        def iterator(): Iterator[A1] = underlying.iterator().map(_._1)
+        override def knownSize: Int = underlying.knownSize
+      }
+    val second: View[A2] =
+      new View[A2] {
+        def iterator(): Iterator[A2] = underlying.iterator().map(_._2)
+        override def knownSize: Int = underlying.knownSize
+      }
+  }
+
+  case class PadTo[A](underlying: Iterable[A], len: Int, elem: A) extends View[A] {
+    def iterator(): Iterator[A] = new Iterator[A] {
+      private var i = 0
+      private var it = underlying.iterator()
+      def next(): A = {
+        val a =
+          if (it.hasNext) it.next()
+          else if (i < len) elem
+          else Iterator.empty.next()
+        i += 1
+        a
+      }
+      def hasNext: Boolean = i < len
+    }
+    override def knownSize: Int = if (underlying.knownSize >= 0) underlying.knownSize max len else -1
+  }
+
 }
 
 /** A trait representing indexable collections with finite length */
@@ -153,9 +270,11 @@ trait IndexedView[+A] extends View[A] with ArrayLike[A] { self =>
   }
 
   override def take(n: Int): IndexedView[A] = new IndexedView.Take(this, n)
+  override def takeRight(n: Int): IndexedView[A] = new IndexedView.TakeRight(this, n)
   override def drop(n: Int): IndexedView[A] = new IndexedView.Drop(this, n)
+  override def dropRight(n: Int): IndexedView[A] = new IndexedView.DropRight(this, n)
   override def map[B](f: A => B): IndexedView[B] = new IndexedView.Map(this, f)
-  def reverse: IndexedView[A] = new IndexedView.Reverse(this)
+  def reverse: IndexedView[A] = IndexedView.Reverse(this)
 }
 
 object IndexedView {
@@ -167,8 +286,22 @@ object IndexedView {
     def apply(i: Int) = underlying.apply(i)
   }
 
+  class TakeRight[A](underlying: IndexedView[A], n: Int)
+  extends View.TakeRight(underlying, n) with IndexedView[A] {
+    override def iterator() = super.iterator() // needed to avoid "conflicting overrides" error
+    def length = underlying.length min normN
+    def apply(i: Int) = underlying.apply(i)
+  }
+
   class Drop[A](underlying: IndexedView[A], n: Int)
-  extends View.Take(underlying, n) with IndexedView[A] {
+  extends View.Drop(underlying, n) with IndexedView[A] {
+    override def iterator() = super.iterator()
+    def length = (underlying.length - normN) max 0
+    def apply(i: Int) = underlying.apply(i + normN)
+  }
+
+  class DropRight[A](underlying: IndexedView[A], n: Int)
+  extends View.DropRight(underlying, n) with IndexedView[A] {
     override def iterator() = super.iterator()
     def length = (underlying.length - normN) max 0
     def apply(i: Int) = underlying.apply(i + normN)

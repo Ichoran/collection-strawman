@@ -1,11 +1,13 @@
 package strawman
 package collection.immutable
 
-import collection.{IterableFactory, IterableOps, Iterator}
+import collection.{IterableFactory, IterableOnce, Iterator, StrictOptimizedIterableOps}
 
-import scala.{Any, Boolean, IllegalArgumentException, IndexOutOfBoundsException, Int, Long, Numeric, SerialVersionUID, Serializable, StringContext, Unit, `inline`, specialized}
+import scala.{Any, Boolean, IllegalArgumentException, IndexOutOfBoundsException, Int, Long, Numeric, Ordering, SerialVersionUID, Serializable, StringContext, Unit, `inline`, specialized}
 import scala.Predef.augmentString
 import java.lang.String
+
+import strawman.collection.mutable.Builder
 
 /** The `Range` class represents integer values in range
   *  ''[start;end)'' with non-zero step value `step`.
@@ -47,12 +49,15 @@ final class Range(
 )
   extends IndexedSeq[Int]
     with IndexedSeqOps[Int, IndexedSeq, IndexedSeq[Int]]
+    with StrictOptimizedIterableOps[Int, IndexedSeq[Int]]
     with Serializable { range =>
 
-  def iterableFactory: IterableFactory[IndexedSeq] = ImmutableArray // FIXME Use Vector instead of Array
+  def iterableFactory: IterableFactory[IndexedSeq] = IndexedSeq
 
   protected[this] def fromSpecificIterable(coll: collection.Iterable[Int]): IndexedSeq[Int] =
     fromIterable(coll)
+
+  protected[this] def newSpecificBuilder(): Builder[Int, IndexedSeq[Int]] = IndexedSeq.newBuilder()
 
   def iterator(): Iterator[Int] = new RangeIterator(start, step, lastElement, isEmpty)
 
@@ -93,6 +98,19 @@ final class Range(
     */
   override def last: Int = if (isEmpty) Nil.head else lastElement
   override def head: Int = if (isEmpty) Nil.head else start
+
+  /** Creates a new range containing all the elements of this range except the last one.
+    *
+    *  $doesNotUseBuilders
+    *
+    *  @return  a new range consisting of all the elements of this range except the last one.
+    */
+  override def init: Range = {
+    if (isEmpty)
+      Nil.init
+
+    dropRight(1)
+  }
 
   /** Creates a new range containing all the elements of this range except the first one.
     *
@@ -179,6 +197,96 @@ final class Range(
       copy(locationAfterN(n), end, step)
     }
 
+  /** Creates a new range consisting of the last `n` elements of the range.
+    *
+    *  $doesNotUseBuilders
+    */
+  override def takeRight(n: Int): Range = {
+    if (n <= 0) newEmptyRange(start)
+    else if (length >= 0) drop(length - n)
+    else {
+      // Need to handle over-full range separately
+      val y = last
+      val x = y - step.toLong*(n-1)
+      if ((step > 0 && x < start) || (step < 0 && x > start)) this
+      else Range.inclusive(x.toInt, y, step)
+    }
+  }
+
+  /** Creates a new range consisting of the initial `length - n` elements of the range.
+    *
+    *  $doesNotUseBuilders
+    */
+  override def dropRight(n: Int): Range = {
+    if (n <= 0) this
+    else if (length >= 0) take(length - n)
+    else {
+      // Need to handle over-full range separately
+      val y = last - step.toInt*n
+      if ((step > 0 && y < start) || (step < 0 && y > start)) newEmptyRange(start)
+      else Range.inclusive(start, y.toInt, step)
+    }
+  }
+
+  // Advance from the start while we meet the given test
+  private def argTakeWhile(p: Int => Boolean): Long = {
+    if (isEmpty) start
+    else {
+      var current = start
+      val stop = last
+      while (current != stop && p(current)) current += step
+      if (current != stop || !p(current)) current
+      else current.toLong + step
+    }
+  }
+
+  override def takeWhile(p: Int => Boolean): Range = {
+    val stop = argTakeWhile(p)
+    if (stop==start) newEmptyRange(start)
+    else {
+      val x = (stop - step).toInt
+      if (x == last) this
+      else Range.inclusive(start, x, step)
+    }
+  }
+
+  override def dropWhile(p: Int => Boolean): Range = {
+    val stop = argTakeWhile(p)
+    if (stop == start) this
+    else {
+      val x = (stop - step).toInt
+      if (x == last) newEmptyRange(last)
+      else Range.inclusive(x + step, last, step)
+    }
+  }
+
+  override def span(p: Int => Boolean): (Range, Range) = {
+    val border = argTakeWhile(p)
+    if (border == start) (newEmptyRange(start), this)
+    else {
+      val x = (border - step).toInt
+      if (x == last) (this, newEmptyRange(last))
+      else (Range.inclusive(start, x, step), Range.inclusive(x+step, last, step))
+    }
+  }
+
+  /** Creates a new range containing the elements starting at `from` up to but not including `until`.
+    *
+    *  $doesNotUseBuilders
+    *
+    *  @param from  the element at which to start
+    *  @param until  the element at which to end (not included in the range)
+    *  @return   a new range consisting of a contiguous interval of values in the old range
+    */
+  override def slice(from: Int, until: Int): Range =
+    if (from <= 0) take(until)
+    else if (until >= length && length >= 0) drop(from)
+    else {
+      val fromValue = locationAfterN(from)
+      if (from >= until) newEmptyRange(fromValue)
+      else Range.inclusive(fromValue, locationAfterN(until-1), step)
+    }
+
   // Overridden only to refine the return type
   override def splitAt(n: Int): (Range, Range) = (take(n), drop(n))
 
@@ -238,6 +346,19 @@ final class Range(
     }
   }
 
+  override def min[A1 >: Int](implicit ord: Ordering[A1]): Int =
+    if (ord eq Ordering.Int) {
+      if (step > 0) head
+      else last
+    } else super.min(ord)
+
+  override def max[A1 >: Int](implicit ord: Ordering[A1]): Int =
+    if (ord eq Ordering.Int) {
+      if (step > 0) last
+      else head
+    } else super.max(ord)
+
+
   override def equals(other: Any) = other match {
     case x: Range =>
       // Note: this must succeed for overfull ranges (length > Int.MaxValue)
@@ -262,7 +383,6 @@ final class Range(
     s"${prefix}Range $start $preposition $end$stepped"
   }
 
-  // TODO Override min, max, slice, init, takeWhile, dropWhile, span, takeRight, dropRight
 }
 
 object Range {

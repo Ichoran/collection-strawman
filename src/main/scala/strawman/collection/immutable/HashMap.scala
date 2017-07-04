@@ -1,12 +1,14 @@
 package strawman
 package collection.immutable
 
-import collection.{Iterator, MapFactory}
+import collection.{Iterator, MapFactory, StrictOptimizedIterableOps}
 import collection.Hashing.{computeHash, keepBits}
 
 import scala.annotation.unchecked.{uncheckedVariance => uV}
-import scala.{Any, AnyRef, Array, Boolean, `inline`, Int, math, NoSuchElementException, None, Nothing, Option, SerialVersionUID, Serializable, Some, Unit, sys}
+import scala.{Any, AnyRef, Array, Boolean, Int, NoSuchElementException, None, Nothing, Option, SerialVersionUID, Serializable, Some, Unit, `inline`, math, sys}
 import java.lang.{Integer, String, System}
+
+import strawman.collection.mutable.{Builder, ImmutableBuilder}
 
 /** This class implements immutable maps using a hash trie.
   *
@@ -28,17 +30,21 @@ import java.lang.{Integer, String, System}
 @SerialVersionUID(2L)
 sealed trait HashMap[K, +V]
   extends Map[K, V]
-     with MapOps[K, V, HashMap, HashMap[K, V]]
-     with Serializable {
+    with MapOps[K, V, HashMap, HashMap[K, V]]
+    with StrictOptimizedIterableOps[(K, V), HashMap[K, V]]
+    with Serializable {
 
   import HashMap.{bufferSize, liftMerger, Merger, MergeFunction, nullToEmpty}
 
   def iterableFactory = List
+  def mapFactory = HashMap
 
   protected[this] def fromSpecificIterable(coll: collection.Iterable[(K, V)]): HashMap[K, V] = HashMap.fromIterable(coll)
 
   protected[this] def mapFromIterable[K2, V2](it: collection.Iterable[(K2, V2)]): HashMap[K2, V2] =
     HashMap.fromIterable(it)
+
+  protected[this] def newSpecificBuilder(): Builder[(K, V), HashMap[K, V]] = HashMap.newBuilder()
 
   def remove(key: K): HashMap[K, V] = removed0(key, computeHash(key), 0)
 
@@ -82,6 +88,8 @@ sealed trait HashMap[K, +V]
 
   override def tail: HashMap[K, V] = this - head._1
 
+  override def init: HashMap[K, V] = this - last._1
+
   override def filter(pred: ((K, V)) => Boolean): HashMap[K, V] = {
     val buffer = new Array[HashMap[K, V]](bufferSize(size))
     nullToEmpty(filter0(pred, negate = false, 0, buffer, 0))
@@ -104,6 +112,11 @@ object HashMap extends MapFactory[HashMap] {
     it match {
       case hm: HashMap[K, V] => hm
       case _ => empty ++ it
+    }
+
+  def newBuilder[K, V](): Builder[(K, V), HashMap[K, V]] =
+    new ImmutableBuilder[(K, V), HashMap[K, V]](empty) {
+      def add(elem: (K, V)): this.type = { elems = elems + elem; this }
     }
 
   private[collection] abstract class Merger[A, B] {
@@ -185,6 +198,10 @@ object HashMap extends MapFactory[HashMap] {
     override def head: (Any, Nothing) = throw new NoSuchElementException("Empty Map")
 
     override def tail: HashMap[Any, Nothing] = throw new NoSuchElementException("Empty Map")
+
+    override def last: (Any, Nothing) = throw new NoSuchElementException("Empty Map")
+
+    override def init: HashMap[Any, Nothing] = throw new NoSuchElementException("Empty Map")
 
   }
 

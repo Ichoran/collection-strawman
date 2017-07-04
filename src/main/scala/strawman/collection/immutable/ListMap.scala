@@ -16,7 +16,7 @@ import scala.annotation.tailrec
 import scala.{Any, AnyRef, Array, Boolean, Int, NoSuchElementException, None, Nothing, Option, SerialVersionUID, Serializable, Some, sys}
 import java.lang.Integer
 
-import strawman.collection.mutable.Builder
+import strawman.collection.mutable.{Builder, ImmutableBuilder}
 
 /**
   * This class implements immutable maps using a list-based data structure. List map iterators and
@@ -45,18 +45,18 @@ import strawman.collection.mutable.Builder
 @SerialVersionUID(301002838095710379L)
 sealed class ListMap[K, +V]
   extends Map[K, V]
-     with MapOps[K, V, ListMap, ListMap[K, V]]
-     with Serializable {
+    with MapOps[K, V, ListMap, ListMap[K, V]]
+    with StrictOptimizedIterableOps[(K, V), ListMap[K, V]]
+    with Serializable {
 
   def iterableFactory = List
+  def mapFactory = ListMap
 
   protected[this] def mapFromIterable[K2, V2](it: collection.Iterable[(K2, V2)]): ListMap[K2,V2] = ListMap.fromIterable(it)
 
-  protected[this] def fromSpecificIterable(coll: collection.Iterable[(K, V)]): ListMap[K, V] =
-    coll match {
-      case lm: ListMap[K, V] => lm
-      case _ => ListMap.fromIterable(coll)
-    }
+  protected[this] def fromSpecificIterable(coll: collection.Iterable[(K, V)]): ListMap[K, V] = ListMap.fromIterable(coll)
+
+  protected[this] def newSpecificBuilder(): Builder[(K, V), ListMap[K, V]] = ListMap.newBuilder()
 
   def empty: ListMap[K, V] = ListMap.empty[K, V]
 
@@ -137,7 +137,7 @@ sealed class ListMap[K, +V]
     override protected def next: ListMap[K, V1] = ListMap.this
 
     override def last: (K, V1) = (key, value)
-//    override def init: ListMap[K, V1] = next
+    override def init: ListMap[K, V1] = next
   }
 }
 
@@ -165,6 +165,11 @@ object ListMap extends MapFactory[ListMap] {
     it match {
       case lm: ListMap[K, V] => lm
       case _ => empty ++ it
+    }
+
+  def newBuilder[K, V](): Builder[(K, V), ListMap[K, V]] =
+    new ImmutableBuilder[(K, V), ListMap[K, V]](empty) {
+      def add(elem: (K, V)): this.type = { elems = elems + elem; this }
     }
 
 }

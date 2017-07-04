@@ -4,27 +4,27 @@ package immutable
 
 import scala.annotation.unchecked.uncheckedVariance
 import scala.annotation.tailrec
-import scala.{Any, Boolean, NoSuchElementException, Nothing, UnsupportedOperationException, Int}
-import mutable.{Builder, ListBuffer}
+import mutable.{Builder, GrowableBuilder, ListBuffer}
+import scala.{Any, Boolean, Int, NoSuchElementException, Nothing, UnsupportedOperationException}
 
 
 /** Concrete collection type: List */
 sealed trait List[+A]
   extends Seq[A]
      with LinearSeq[A]
-     with SeqOps[A, List, List[A]]
-     with Buildable[A, List[A]] {
+     with LinearSeqOps[A, List, List[A]]
+     with StrictOptimizedIterableOps[A, List[A]] {
 
   def iterableFactory = List
 
   protected[this] def fromSpecificIterable(coll: collection.Iterable[A]): List[A] = fromIterable(coll)
 
-  protected[this] def newBuilder = List.newBuilder[A]()
-
-  @tailrec final def length: Int = if (isEmpty) 0 else tail.length
+  protected[this] def newSpecificBuilder() = List.newBuilder[A]()
 
   /** Prepend element */
   def :: [B >: A](elem: B): List[B] =  new ::(elem, this)
+
+  override def prepend[B >: A](elem: B): List[B] = elem :: this
 
   /** Prepend operation that avoids copying this list */
   def ++:[B >: A](prefix: List[B]): List[B] =
@@ -35,6 +35,16 @@ sealed trait List[+A]
   override def concat[B >: A](xs: IterableOnce[B]): List[B] = xs match {
     case xs: List[B] => this ++: xs
     case _ => super.concat(xs)
+  }
+
+  override def span(p: A => Boolean): (List[A], List[A]) = {
+    val b = new ListBuffer[A]
+    var these = this
+    while (!these.isEmpty && p(these.head)) {
+      b += these.head
+      these = these.tail
+    }
+    (b.toList, these)
   }
 
   override def className = "List"
@@ -55,14 +65,14 @@ case object Nil extends List[Nothing] {
   override def tail: Nothing = throw new UnsupportedOperationException("tail of empty list")
 }
 
-object List extends IterableFactoryWithBuilder[List] {
+object List extends IterableFactory[List] {
 
   def fromIterable[B](coll: collection.Iterable[B]): List[B] = coll match {
     case coll: List[B] => coll
     case _ => ListBuffer.fromIterable(coll).toList
   }
 
-  def newBuilder[A](): Builder[A, List[A]] = new ListBuffer[A].mapResult(_.toList)
+  override def newBuilder[A](): Builder[A, List[A]] = ListBuffer.newBuilder[A]().mapResult(_.toList)
 
   def empty[A]: List[A] = Nil
 }

@@ -2,10 +2,10 @@ package strawman
 package collection
 package immutable
 
-import mutable.Builder
+import mutable.{Builder, ImmutableBuilder}
 import Hashing.computeHash
 
-import scala.{Any, AnyRef, Array, Boolean, `inline`, Int, NoSuchElementException, SerialVersionUID, Serializable, Unit, sys}
+import scala.{Any, AnyRef, Array, Boolean, Int, NoSuchElementException, SerialVersionUID, Serializable, Unit, `inline`, sys}
 import scala.Predef.assert
 import java.lang.Integer
 
@@ -25,14 +25,17 @@ import java.lang.Integer
 @SerialVersionUID(2L)
 sealed trait HashSet[A]
   extends Set[A]
-     with SetOps[A, HashSet, HashSet[A]]
-     with Serializable {
+    with SetOps[A, HashSet, HashSet[A]]
+    with StrictOptimizedIterableOps[A, HashSet[A]]
+    with Serializable {
 
   import HashSet.nullToEmpty
 
   def iterableFactory = HashSet
 
   protected[this] def fromSpecificIterable(coll: collection.Iterable[A]): HashSet[A] = fromIterable(coll)
+
+  protected[this] def newSpecificBuilder(): Builder[A, HashSet[A]] = HashSet.newBuilder()
 
   def contains(elem: A): Boolean = get0(elem, computeHash(elem), 0)
 
@@ -43,6 +46,8 @@ sealed trait HashSet[A]
   override def empty: HashSet[A] = HashSet.empty
 
   override def tail: HashSet[A] = this - head
+
+  override def init: HashSet[A] = this - last
 
   protected def get0(key: A, hash: Int, level: Int): Boolean
 
@@ -62,6 +67,11 @@ object HashSet extends IterableFactory[HashSet] {
 
   def empty[A]: HashSet[A] = EmptyHashSet.asInstanceOf[HashSet[A]]
 
+  def newBuilder[A](): Builder[A, HashSet[A]] =
+    new ImmutableBuilder[A, HashSet[A]](empty) {
+      def add(elem: A): this.type = { elems = elems + elem; this }
+    }
+
   private object EmptyHashSet extends HashSet[Any] {
 
     def iterator(): Iterator[Any] = Iterator.empty
@@ -71,6 +81,8 @@ object HashSet extends IterableFactory[HashSet] {
     override def head: Any = throw new NoSuchElementException("Empty Set")
 
     override def tail: HashSet[Any] = throw new NoSuchElementException("Empty Set")
+
+    override def init: HashSet[Any] = throw new NoSuchElementException("Empty Set")
 
     override def size: Int = 0
 
@@ -98,6 +110,10 @@ object HashSet extends IterableFactory[HashSet] {
     override def head: A = key
 
     override def tail: HashSet[A] = HashSet.empty[A]
+
+    override def last: A = key
+
+    override def init: HashSet[A] = HashSet.empty[A]
 
     override def size: Int = 1
 

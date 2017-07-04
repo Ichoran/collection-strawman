@@ -9,12 +9,14 @@ import scala.Predef.intWrapper
 
 /** Concrete collection type: ArrayBuffer */
 class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
-  extends IndexedOptimizedGrowableSeq[A]
-     with SeqOps[A, ArrayBuffer, ArrayBuffer[A]]
-     with Buildable[A, ArrayBuffer[A]]
-     with Builder[A, ArrayBuffer[A]] {
+  extends IndexedSeq[A]
+    with IndexedSeqOps[A, ArrayBuffer, ArrayBuffer[A]]
+    with IndexedOptimizedGrowableSeq[A]
+    with StrictOptimizedIterableOps[A, ArrayBuffer[A]] {
 
   def this() = this(new Array[AnyRef](16), 0)
+
+  def this(initLength: Int) = this(new Array[AnyRef](initLength), initLength)
 
   private var array: Array[AnyRef] = initElems
   private var end = initLength
@@ -49,9 +51,9 @@ class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
 
   protected[this] def fromSpecificIterable(coll: collection.Iterable[A]): ArrayBuffer[A] = fromIterable(coll)
 
-  protected[this] def newBuilder = new ArrayBuffer[A]
+  protected[this] def newSpecificBuilder(): Builder[A, ArrayBuffer[A]] = ArrayBuffer.newBuilder()
 
-  def clear() =
+  def clear(): Unit =
     end = 0
 
   def add(elem: A): this.type = {
@@ -72,8 +74,6 @@ class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
     }
     this
   }
-
-  def result() = this
 
   def insert(idx: Int, elem: A): Unit = {
     checkWithinBounds(idx, idx)
@@ -124,7 +124,7 @@ class ArrayBuffer[A] private (initElems: Array[AnyRef], initLength: Int)
   override def className = "ArrayBuffer"
 }
 
-object ArrayBuffer extends IterableFactoryWithBuilder[ArrayBuffer] {
+object ArrayBuffer extends IterableFactory[ArrayBuffer] {
 
   /** Avoid reallocation of buffer if length is known. */
   def fromIterable[B](coll: collection.Iterable[B]): ArrayBuffer[B] =
@@ -136,7 +136,7 @@ object ArrayBuffer extends IterableFactoryWithBuilder[ArrayBuffer] {
     }
     else new ArrayBuffer[B] ++= coll
 
-  def newBuilder[A](): Builder[A, ArrayBuffer[A]] = new ArrayBuffer[A]()
+  def newBuilder[A](): Builder[A, ArrayBuffer[A]] = new GrowableBuilder(empty[A])
 
   def empty[A]: ArrayBuffer[A] = new ArrayBuffer[A]()
 }

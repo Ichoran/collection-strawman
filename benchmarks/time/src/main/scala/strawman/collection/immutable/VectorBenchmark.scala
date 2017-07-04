@@ -1,4 +1,4 @@
-package strawman.collection.mutable
+package strawman.collection.immutable
 
 import java.util.concurrent.TimeUnit
 
@@ -14,18 +14,18 @@ import scala.Predef.intWrapper
 @Warmup(iterations = 12)
 @Measurement(iterations = 12)
 @State(Scope.Benchmark)
-class ListBufferBenchmark {
+class VectorBenchmark {
 
   @Param(scala.Array("0", "1", "2", "3", "4", "7", "8", "15", "16", "17", "39", "282", "73121", "7312102"))
   var size: Int = _
 
-  var xs: ListBuffer[Long] = _
-  var xss: scala.Array[ListBuffer[Long]] = _
+  var xs: Vector[Long] = _
+  var xss: scala.Array[Vector[Long]] = _
   var randomIndices: scala.Array[Int] = _
 
   @Setup(Level.Trial)
   def initData(): Unit = {
-    def freshCollection() = ListBuffer((1 to size).map(_.toLong): _*)
+    def freshCollection() = Vector((1 to size).map(_.toLong): _*)
     xs = freshCollection()
     xss = scala.Array.fill(1000)(freshCollection())
     if (size > 0) {
@@ -34,13 +34,12 @@ class ListBufferBenchmark {
   }
 
   @Benchmark
-//  @OperationsPerInvocation(size)
   def cons(bh: Blackhole): Unit = {
-    var ys = ListBuffer.empty[Long]
+    var ys = Vector.empty[Long]
     var i = 0L
     while (i < size) {
-      ys += i
-      i = i + 1
+      ys = ys :+ i
+      i += 1
     }
     bh.consume(ys)
   }
@@ -76,11 +75,5 @@ class ListBufferBenchmark {
 
   @Benchmark
   def map(bh: Blackhole): Unit = bh.consume(xs.map(x => x + 1))
-
-  @Benchmark
-  def groupBy(bh: Blackhole): Unit = {
-    val result = xs.groupBy(_ % 5)
-    bh.consume(result)
-  }
 
 }

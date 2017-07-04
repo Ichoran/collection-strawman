@@ -2,10 +2,10 @@ package strawman
 package collection
 package immutable
 
-import scala.{None, Nothing, Option, Some, StringContext, Any, Int}
-import scala.Predef.???
+import strawman.collection.mutable.{ArrayBuffer, Builder}
+
+import scala.{Any, Int, None, Nothing, Option, Some, StringContext}
 import scala.annotation.tailrec
-import mutable.Builder
 
 class LazyList[+A](expr: => LazyList.Evaluated[A])
   extends Seq[A]
@@ -28,13 +28,20 @@ class LazyList[+A](expr: => LazyList.Evaluated[A])
   override def head = force.get._1
   override def tail: LazyList[A] = force.get._2
 
-  @tailrec final def length: Int = if (isEmpty) 0 else tail.length
-
-  def #:: [B >: A](elem: => B): LazyList[B] = new LazyList(Some((elem, this)))
+  def prependLazy[B >: A](elem: => B): LazyList[B] = new LazyList(Some((elem, this)))
 
   def iterableFactory = LazyList
 
   protected[this] def fromSpecificIterable(coll: collection.Iterable[A]): LazyList[A] = fromIterable(coll)
+
+  protected[this] def newSpecificBuilder(): Builder[A, LazyList[A]] =
+    IndexedSeq.newBuilder().mapResult(_.to(LazyList))
+
+// The following is commented because we need to compare it with the default implementation first
+//  def zipWithIndex: LazyList[(A, Int)] =
+//    LazyList.unfold((0, this)) { case (i, as) =>
+//      as.force.map { case (a, _as) => ((a, i), (i + 1, _as)) }
+//    }
 
   override def className = "LazyList"
 
@@ -53,6 +60,10 @@ object LazyList extends IterableFactory[LazyList] {
 
   object Empty extends LazyList[Nothing](None)
 
+  implicit class Deferrer[A](l: => LazyList[A]) {
+    def #:: [B >: A](elem: => B): LazyList[B] = new LazyList(Some((elem, l)))
+  }
+
   object #:: {
     def unapply[A](s: LazyList[A]): Evaluated[A] = s.force
   }
@@ -65,5 +76,24 @@ object LazyList extends IterableFactory[LazyList] {
   def fromIterator[A](it: Iterator[A]): LazyList[A] =
     new LazyList(if (it.hasNext) Some(it.next(), fromIterator(it)) else None)
 
-  def empty[A]: LazyList[A] = new LazyList[A](None)
+  def empty[A]: LazyList[A] = Empty
+
+  /**
+    * @return a LazyList by using a function `f` producing elements of
+    *         type `A` and updating an internal state `S`.
+    * @param init State initial value
+    * @param f    Computes the next element (or returns `None` to signal
+    *             the end of the collection)
+    * @tparam A   Type of the elements
+    * @tparam S   Type of the internal state
+    */
+  def unfold[A, S](init: S)(f: S => Option[(A, S)]): LazyList[A] = {
+    def loop(s: S): LazyList[A] = new LazyList[A]({
+      f(s).map { case (a, _s) => (a, loop(_s)) }
+    })
+    loop(init)
+  }
+
+  def newBuilder[A](): Builder[A, LazyList[A]] = ArrayBuffer.newBuilder[A]().mapResult(fromIterable)
+
 }

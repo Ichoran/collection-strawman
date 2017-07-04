@@ -3,7 +3,7 @@ package collection
 
 import strawman.collection.immutable.TreeMap
 
-import scala.{`inline`, Ordering}
+import scala.{`inline`, Ordering, PartialFunction}
 
 /** Base type of sorted sets */
 trait SortedMap[K, +V]
@@ -12,7 +12,11 @@ trait SortedMap[K, +V]
 
 trait SortedMapOps[K, +V, +CC[X, Y] <: SortedMap[X, Y] with SortedMapOps[X, Y, CC, _], +C <: SortedMap[K, V]]
   extends MapOps[K, V, Map, C]
-     with SortedOps[K, C] {
+     with SortedOps[K, SortedSet, C] {
+
+  def sortedIterableFactory = SortedSet
+
+  def sortedMapFactory: SortedMapFactory[CC]
 
   protected[this] def sortedMapFromIterable[K2, V2](it: collection.Iterable[(K2, V2)])(implicit ordering: Ordering[K2]): CC[K2, V2]
 
@@ -25,6 +29,12 @@ trait SortedMapOps[K, +V, +CC[X, Y] <: SortedMap[X, Y] with SortedMapOps[X, Y, C
 
   def flatMap[K2, V2](f: ((K, V)) => IterableOnce[(K2, V2)])(implicit ordering: Ordering[K2]): CC[K2, V2] =
     sortedMapFromIterable(View.FlatMap(coll, f))
+
+  def collect[K2, V2](pf: PartialFunction[(K, V), (K2, V2)])(implicit ordering: Ordering[K2]): CC[K2, V2] =
+    flatMap { (kv: (K, V)) =>
+      if (pf.isDefinedAt(kv)) View.Single(pf(kv))
+      else View.Empty
+    }
 
   /** Returns a new $coll containing the elements from the left hand operand followed by the elements from the
     *  right hand operand. The element type of the $coll is the most specific superclass encompassing
