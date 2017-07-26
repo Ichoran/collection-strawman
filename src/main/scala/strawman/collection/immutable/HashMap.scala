@@ -31,7 +31,7 @@ import strawman.collection.mutable.{Builder, ImmutableBuilder}
 sealed trait HashMap[K, +V]
   extends Map[K, V]
     with MapOps[K, V, HashMap, HashMap[K, V]]
-    with StrictOptimizedIterableOps[(K, V), HashMap[K, V]]
+    with StrictOptimizedIterableOps[(K, V), Iterable, HashMap[K, V]]
     with Serializable {
 
   import HashMap.{bufferSize, liftMerger, Merger, MergeFunction, nullToEmpty}
@@ -572,7 +572,6 @@ object HashMap extends MapFactory[HashMap] {
         new HashTrieMap[K, V1](this.bitmap | that.bitmap, merged, totalelems)
       case hm: HashMapCollision1[_, _] => that.merge0(this, level, merger.invert)
       case hm: HashMap[_, _] => this
-      case _ => sys.error("section supposed to be unreachable.")
     }
   }
 

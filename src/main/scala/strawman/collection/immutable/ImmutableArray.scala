@@ -4,7 +4,7 @@ package collection.immutable
 import strawman.collection.mutable.{ArrayBuffer, Builder, GrowableBuilder}
 import strawman.collection.{IterableFactory, IterableOnce, Iterator, StrictOptimizedIterableOps, View}
 
-import scala.{Any, Boolean, Int, Nothing}
+import scala.{Any, ArrayIndexOutOfBoundsException, Boolean, Int, Nothing, throws}
 import scala.runtime.ScalaRunTime
 import scala.Predef.{???, intWrapper}
 
@@ -16,7 +16,7 @@ import scala.Predef.{???, intWrapper}
 class ImmutableArray[+A] private[collection] (private val elements: scala.Array[Any])
   extends IndexedSeq[A]
     with IndexedSeqOps[A, ImmutableArray, ImmutableArray[A]]
-    with StrictOptimizedIterableOps[A, ImmutableArray[A]] {
+    with StrictOptimizedSeqOps[A, ImmutableArray, ImmutableArray[A]] {
 
   def iterableFactory: IterableFactory[ImmutableArray] = ImmutableArray
 
@@ -28,6 +28,7 @@ class ImmutableArray[+A] private[collection] (private val elements: scala.Array[
 
   override def knownSize: Int = elements.length
 
+  @throws[ArrayIndexOutOfBoundsException]
   def apply(i: Int): A = ScalaRunTime.array_apply(elements, i).asInstanceOf[A]
 
   def iterator(): Iterator[A] = view.iterator()

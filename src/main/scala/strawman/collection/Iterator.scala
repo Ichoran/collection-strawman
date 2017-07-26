@@ -1,7 +1,7 @@
 package strawman.collection
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
-import scala.{Any, Array, Boolean, Int, math, None, NoSuchElementException, Nothing, Option, StringContext, Some, Unit}
+import scala.{Any, Array, Boolean, Int, math, None, NoSuchElementException, Nothing, Option, StringContext, Some, Unit, throws}
 import scala.Predef.{intWrapper, require}
 import strawman.collection.mutable.ArrayBuffer
 
@@ -13,6 +13,7 @@ import strawman.collection.mutable.ArrayBuffer
   */
 trait Iterator[+A] extends IterableOnce[A] { self =>
   def hasNext: Boolean
+  @throws[NoSuchElementException]
   def next(): A
   def iterator() = this
 
@@ -133,7 +134,7 @@ trait Iterator[+A] extends IterableOnce[A] { self =>
       // The order of terms in the following condition is important
       // here as self.hasNext could be blocking
       while (i < size && self.hasNext) {
-        buf += self.next
+        buf += self.next()
         i += 1
       }
       buf
@@ -190,7 +191,8 @@ trait Iterator[+A] extends IterableOnce[A] { self =>
     }
 
     def hasNext = filled || fill()
-    def next = {
+    @throws[NoSuchElementException]
+    def next() = {
       if (!filled)
         fill()
 
@@ -379,44 +381,6 @@ trait Iterator[+A] extends IterableOnce[A] { self =>
       else Iterator.empty.next()
   }
 
-  /*
-   * Implemented by means of a buffer to keep track of the last n elements during iteration.
-   */
-  def takeRight(n: Int): Iterator[A] = {
-    if (n <= 0) Iterator.empty
-    else {
-      // Return an iterator that iterates over the elements via a buffer
-      new Iterator[A]() {
-        private[this] var index = 0
-        private[this] var count = 0
-        // Use a lazy val for the buffer to make sure initialization is done only if needed and at most once
-        private[this] lazy val buffer = {
-          // Iterate over all elements while keeping track of the last n
-          var buf = ArrayBuffer[A]()
-          while (self.hasNext) {
-            if (index >= buf.length) buf += self.next()
-            else buf(index) = self.next()
-            index = if ((index + 1) >= n) 0 else index + 1
-            if (count < n) count += 1
-          }
-          // Adjust the starting index if needed
-          index = if (index >= buf.length) 0 else index
-          buf
-        }
-        def hasNext: Boolean = {
-          // Force initialization of buffer and return whether there are any elements left in the buffer
-          buffer != null && count > 0
-        }
-        def next(): A = {
-          val value = buffer(index)
-          index = if (index + 1 >= buffer.length) 0 else index + 1
-          count -= 1
-          value
-        }
-      }
-    }
-  }
-
   /** Takes longest prefix of values produced by this iterator that satisfy a predicate.
     *
     *  @param   p  The predicate used to test elements.
@@ -446,40 +410,6 @@ trait Iterator[+A] extends IterableOnce[A] { self =>
       i += 1
     }
     this
-  }
-
-  /*
-   * Implemented by means of a buffer to keep the last n elements from being returned during iteration.
-   */
-  def dropRight(n: Int): Iterator[A] = {
-    if (n <= 0) self
-    else {
-      // Return an iterator that returns already buffered elements as it buffers new ones (using a buffer of most n elements)
-      new Iterator[A]() {
-        private[this] var index = 0
-        private[this] lazy val buffer = {
-          // Fill the buffer with the first n elements (or fewer if the n is greater than the iterator length)
-          val buf = ArrayBuffer[A]()
-          while (index < n && self.hasNext) {
-            buf += self.next()
-            index += 1
-          }
-          index = 0
-          buf
-        }
-
-        def hasNext: Boolean = {
-          // Force initialization of buffer and don't stop until the iterator is exhausted (without having returned the elements currently in the buffer since those are the ones to drop)
-          buffer != null && self.hasNext
-        }
-        def next(): A = {
-          val value = buffer(index)
-          buffer(index) = self.next()
-          index = if (index + 1 >= buffer.length) 0 else index + 1
-          value
-        }
-      }
-    }
   }
 
   /** Skips longest sequence of elements of this iterator which satisfy given

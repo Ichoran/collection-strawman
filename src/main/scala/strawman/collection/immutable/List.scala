@@ -10,10 +10,9 @@ import scala.{Any, Boolean, Int, NoSuchElementException, Nothing, UnsupportedOpe
 
 /** Concrete collection type: List */
 sealed trait List[+A]
-  extends Seq[A]
-     with LinearSeq[A]
+  extends LinearSeq[A]
      with LinearSeqOps[A, List, List[A]]
-     with StrictOptimizedIterableOps[A, List[A]] {
+     with StrictOptimizedSeqOps[A, List, List[A]] {
 
   def iterableFactory = List
 

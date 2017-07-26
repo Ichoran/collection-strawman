@@ -5,7 +5,7 @@ package immutable
 import strawman.collection.mutable.{Builder, ReusableBuilder}
 
 import scala.annotation.unchecked.uncheckedVariance
-import scala.{AnyRef, Array, Boolean, IllegalArgumentException, IndexOutOfBoundsException, `inline`, Int, math, NoSuchElementException, Nothing, Serializable, SerialVersionUID, Unit, UnsupportedOperationException}
+import scala.{AnyRef, Array, Boolean, IllegalArgumentException, IndexOutOfBoundsException, Int, math, NoSuchElementException, Nothing, Serializable, SerialVersionUID, Unit, UnsupportedOperationException, `inline`, throws}
 import scala.Predef.intWrapper
 
 /** Companion object to the Vector class
@@ -64,6 +64,7 @@ object Vector extends IterableFactory[Vector] {
 final class Vector[+A] private[immutable] (private[collection] val startIndex: Int, private[collection] val endIndex: Int, focus: Int)
   extends IndexedSeq[A]
     with IndexedSeqOps[A, Vector, Vector[A]]
+    with StrictOptimizedSeqOps[A, Vector, Vector[A]]
     with VectorPointer[A @uncheckedVariance]
     with Serializable { self =>
 
@@ -105,11 +106,13 @@ final class Vector[+A] private[immutable] (private[collection] val startIndex: I
   // In principle, escape analysis could even remove the iterator/builder allocations and do it
   // with local variables exclusively. But we're not quite there yet ...
 
+  @throws[IndexOutOfBoundsException]
   def apply(index: Int): A = {
     val idx = checkRangeConvert(index)
     getElem(idx, idx ^ focus)
   }
 
+  @throws[IndexOutOfBoundsException]
   private def checkRangeConvert(index: Int) = {
     val idx = index + startIndex
     if (index >= 0 && idx < endIndex)
@@ -196,8 +199,8 @@ final class Vector[+A] private[immutable] (private[collection] val startIndex: I
               v
             case n if this.size < (n >>> Log2ConcatFaster) && it.isInstanceOf[Vector[_]] =>
               var v = it.asInstanceOf[Vector[B]]
-              val ri = this.reverseIterator
-              while (ri.hasNext) v = ri.next +: v
+              val ri = this.reverseIterator()
+              while (ri.hasNext) v = ri.next() +: v
               v
             case _ => super.concat(that)
           }
