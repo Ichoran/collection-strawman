@@ -2,7 +2,7 @@ package strawman.collection
 
 import strawman.collection.mutable.{ArrayBuffer, Builder}
 
-import scala.{Any, Boolean, Equals, IndexOutOfBoundsException, Int, Nothing, annotation, throws}
+import scala.{Any, Boolean, Equals, NoSuchElementException, IndexOutOfBoundsException, Int, Nothing, annotation, throws}
 import scala.Predef.{<:<, intWrapper}
 
 /** Concrete collection type: View */
@@ -82,10 +82,26 @@ object View extends IterableFactory[View] {
   }
 
   /** A view that filters an underlying collection. */
-  case class Filter[A](underlying: Iterable[A], p: A => Boolean) extends View[A] {
+  class Filter[A](val underlying: Iterable[A], val p: A => Boolean) extends View[A] {
     def iterator() = underlying.iterator().filter(p)
   }
 
+  object Filter {
+    def apply[A](underlying: Iterable[A], p: A => Boolean): Filter[A] =
+      underlying match {
+        case filter: Filter[A] => new Filter(filter.underlying, a => filter.p(a) && p(a))
+        case _                 => new Filter(underlying, p)
+      }
+  }
+
+  case class FilterKeys[K, V](underlying: Iterable[(K, V)], p: K => Boolean) extends View[(K, V)] {
+    def iterator(): Iterator[(K, V)] = underlying.iterator().filter(kv => p(kv._1))
+  }
+
+  /** A view that removes the duplicated elements **/
+  class Distinct[A](val underlying: Iterable[A]) extends View[A] {
+    def iterator(): Iterator[A] = underlying.iterator().distinct
+  }
   /** A view that partitions an underlying collection into two views */
   case class Partition[A](underlying: Iterable[A], p: A => Boolean) {
 
@@ -139,6 +155,11 @@ object View extends IterableFactory[View] {
   case class Map[A, B](underlying: Iterable[A], f: A => B) extends View[B] {
     def iterator() = underlying.iterator().map(f)
     override def knownSize = underlying.knownSize
+  }
+
+  case class MapValues[K, V, W](underlying: Iterable[(K, V)], f: V => W) extends View[(K, W)] {
+    def iterator(): Iterator[(K, W)] = underlying.iterator().map(kv => (kv._1, f(kv._2)))
+    override def knownSize: Int = underlying.knownSize
   }
 
   /** A view that flatmaps elements of the underlying collection. */
@@ -195,6 +216,11 @@ object View extends IterableFactory[View] {
         }
         def hasNext: Boolean = it.hasNext
       }
+  }
+
+  private[collection] class Patched[A](underlying: Iterable[A], from: Int, other: IterableOnce[A], replaced: Int) extends View[A] {
+    if (from < 0 || from > size) throw new IndexOutOfBoundsException(from.toString)
+    def iterator(): Iterator[A] = underlying.iterator().patch(from, other.iterator(), replaced)
   }
 
   case class ZipWithIndex[A](underlying: Iterable[A]) extends View[(A, Int)] {

@@ -4,6 +4,7 @@ package collection
 import scala.{Any, Array, Boolean, Equals, Int, NoSuchElementException, `inline`, throws}
 import scala.Predef.intWrapper
 import scala.util.hashing.MurmurHash3
+import java.lang.String
 
 /** Base trait for set collections.
   */
@@ -116,6 +117,8 @@ trait SetOps[A, +CC[X], +C <: Set[A]]
     }
 
   override def hashCode(): Int = Set.setHash(coll)
+
+  override def toString(): String = super[IterableOps].toString() // Because `Function1` overrides `toString` too
 
   /** Computes the intersection between this set and another set.
     *

@@ -276,6 +276,20 @@ class StrawmanTest {
     assert(xs2 == (immutable.Seq(42) ++ xs))
     val xs3 = xs.updated(1, 42)
     assert(xs3(1) == 42)
+    val xs4 = xs ++: xs
+    val ys4: Seq[Int] = xs4
+    val xs5 = xs ++: Nil
+    val ys5: Seq[Int] = xs5
+    val xs6 = Nil ++: xs
+    val ys6: Seq[Int] = xs6
+    val xs7 = xs ++: ("a" :: Nil)
+    val ys7: Seq[Any] = xs7
+    val xs8 = xs.patch(0, Nil, 0)
+    val ys8: Seq[Int] = xs8
+    val xs9 = xs.patch(0, List(1, 2, 3), 2)
+    val ys9: Seq[Int] = xs9
+    val xs10 = xs.patch(xs.length, List(1, 2, 3), 0)
+    val ys10: Seq[Int] = xs10
   }
 
   def immutableArrayOps(xs: immutable.ImmutableArray[Int]): Unit = {
@@ -526,6 +540,19 @@ class StrawmanTest {
   }
 
   @Test
+  def distinct(): Unit = {
+    // Lazy collections distinct
+    assert(LazyList[Int]().distinct.isEmpty)
+    assert(LazyList(1,1,1,1).distinct.equals(LazyList(1)))
+    assert(LazyList(1,2,3,1).distinct.equals(LazyList(1,2,3)))
+
+    // Strict collections distinct
+    assert(List().distinct.equals(List()))
+    assert(List(1,1,1,1).distinct.equals(List(1)))
+    assert(List(1,2,3,1).distinct.equals(List(1,2,3)))
+  }
+
+  @Test
   def linearSeqSize(): Unit = {
     val list = 1 :: 2 :: 3 :: Nil
     assert(list.length == list.size && list.size == 3)
@@ -558,6 +585,7 @@ class StrawmanTest {
     immutableArrayOps(intsArr)
     lazyListOps(intsLzy)
     equality()
+    distinct()
     linearSeqSize()
   }
 }
